@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars and customize before terraform plan/apply.
+# Do not commit terraform.tfvars if it contains personal IP addresses or other sensitive data.
+
+aws_region = "us-east-1"
+
+project_name = "agent-waf"
+environment  = "dev"
+
+# Replace with your public IP CIDR, for example: ["203.0.113.10/32"]
+allowed_ingress_cidrs = ["YOUR.PUBLIC.IP/32"]
+
+# Optional until you have an ACM certificate in the same region as the ALB.
+# acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Budget alerts require verified email addresses in the AWS account.
+budget_notification_emails = ["you@example.com"]
+
+# Optional: enable OpenAI secret injection and update the secret value after apply.
+# openai_api_key_secret_enabled = true
