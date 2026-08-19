@@ -44,6 +44,7 @@ class AgentWAFBlockedError(AgentError):
         blocked = decision.blocked_by
         assert blocked is not None
         super().__init__(blocked.reason)
+        self.status_code = 429 if blocked.rule == "rate_limit" else 403
         self.decision = decision
         self.rule = blocked.rule
         self.reason = blocked.reason

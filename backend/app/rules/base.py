@@ -20,6 +20,9 @@ class WAFRule(ABC):
     def record_success(self, request: WAFRequest) -> None:
         """Update state after the gateway successfully executes the call."""
 
+    def record_failure(self, request: WAFRequest) -> None:
+        """Release state reserved while evaluating a call that did not succeed."""
+
     def allow(self, reason: str) -> RuleResult:
         return RuleResult(
             rule=self.name,

@@ -83,6 +83,22 @@ class TestRateLimitRule:
             is RuleDecision.ALLOW
         )
 
+    def test_failed_call_releases_atomic_reservation(self) -> None:
+        rule = RateLimitRule(
+            {"search_products": RateLimit(max_calls=1, window_seconds=60)},
+            InMemoryRateLimitStore(),
+            clock=lambda: 100.0,
+        )
+        failed = request(session_id="failed")
+
+        assert rule.evaluate(failed).decision is RuleDecision.ALLOW
+        rule.record_failure(failed)
+
+        assert (
+            rule.evaluate(request(session_id="retry")).decision
+            is RuleDecision.ALLOW
+        )
+
 
 class TestParameterValidationRule:
     def test_blocks_injection_string_at_any_nesting_level(self) -> None:

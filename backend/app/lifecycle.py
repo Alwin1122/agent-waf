@@ -23,6 +23,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Initialize, verify and eventually close PostgreSQL and Redis."""
     settings = getattr(app.state, "settings", None) or get_settings()
     app.state.persistence_ready = not settings.persistence_enabled
+    app.state.persistence_bootstrap_ready = not settings.persistence_enabled
     app.state.persistence_error = None
     logger.info(
         "Application startup: persistence_enabled=%s",
@@ -47,8 +48,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 get_tool_gateway().list_tools(),
             )
             app.state.persistence_ready = True
+            app.state.persistence_bootstrap_ready = True
             logger.info("PostgreSQL and Redis readiness checks passed")
         except Exception:
+            app.state.persistence_ready = False
+            app.state.persistence_bootstrap_ready = False
             app.state.persistence_error = "Persistence dependencies are unavailable"
             logger.exception("Persistence startup check failed")
 

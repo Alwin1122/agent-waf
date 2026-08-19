@@ -191,6 +191,24 @@ def test_waf_block_is_returned_without_second_openai_call() -> None:
     model.complete.assert_called_once()
 
 
+def test_rate_limit_block_maps_to_http_429() -> None:
+    blocked = RuleResult(
+        rule="rate_limit",
+        decision=RuleDecision.BLOCK,
+        reason="Rate limit exceeded",
+    )
+
+    error = AgentWAFBlockedError(
+        WAFDecision(
+            decision=RuleDecision.BLOCK,
+            results=[blocked],
+            blocked_by=blocked,
+        )
+    )
+
+    assert error.status_code == 429
+
+
 @pytest.mark.parametrize(
     "tool_call",
     [

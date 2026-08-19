@@ -62,6 +62,11 @@ class WAFRuleEngine:
         for rule in self._rules:
             rule.record_success(request)
 
+    def record_failure(self, request: WAFRequest) -> None:
+        """Let stateful rules release reservations for unsuccessful calls."""
+        for rule in self._rules:
+            rule.record_failure(request)
+
 
 def build_default_waf_engine() -> WAFRuleEngine:
     """Build the in-memory Phase 3 policy configuration."""

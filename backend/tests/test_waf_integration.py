@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from unittest.mock import Mock
 
 from fastapi.testclient import TestClient
@@ -10,6 +12,9 @@ from app.main import app
 from app.rules import ParameterValidationRule, RateLimit, RateLimitRule, WAFRuleEngine
 from app.rules.engine import get_waf_engine
 from app.rules.stores import InMemoryRateLimitStore
+from app.schemas.tool_calls import ToolCallRequest
+from app.services.audit import InMemoryAuditRepository
+from app.services.protected_tools import ProtectedToolService
 from app.services.tool_gateway import get_tool_gateway
 
 PAYLOAD = {
@@ -73,6 +78,47 @@ def test_rate_limit_blocks_fourth_request_before_gateway(
     finally:
         app.dependency_overrides.clear()
 
-    assert [response.status_code for response in responses] == [200, 200, 200, 403]
+    assert [response.status_code for response in responses] == [200, 200, 200, 429]
     assert responses[-1].json()["rule"] == "rate_limit"
+    assert gateway.execute.call_count == 3
+
+
+def test_concurrent_rate_limit_allows_exactly_configured_capacity() -> None:
+    gateway = Mock()
+    allowed_calls = Barrier(3)
+
+    def execute(*args: object) -> dict:
+        allowed_calls.wait(timeout=5)
+        return {"count": 0, "products": []}
+
+    gateway.execute.side_effect = execute
+    service = ProtectedToolService(
+        WAFRuleEngine(
+            [
+                RateLimitRule(
+                    {"search_products": RateLimit(3, 60)},
+                    InMemoryRateLimitStore(),
+                    clock=lambda: 100.0,
+                )
+            ]
+        ),
+        gateway,
+        InMemoryAuditRepository(),
+    )
+
+    def submit(index: int) -> bool:
+        return service.execute(
+            ToolCallRequest(
+                agent_id="agent-1",
+                session_id=f"session-{index}",
+                tool="search_products",
+                parameters={"query": "laptop"},
+            )
+        ).allowed
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        outcomes = list(executor.map(submit, range(10)))
+
+    assert outcomes.count(True) == 3
+    assert outcomes.count(False) == 7
     assert gateway.execute.call_count == 3

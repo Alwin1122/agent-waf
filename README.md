@@ -105,6 +105,7 @@ cp .env.example .env             # Windows: copy .env.example .env
 | `REDIS_SOCKET_TIMEOUT_SECONDS` | `5` | Redis connection/operation timeout |
 | `REDIS_STATE_TTL_SECONDS` | `86400` | Retention for rate and sequence state |
 | `IDEMPOTENCY_TTL_SECONDS` | `3600` | Retention for idempotency keys |
+| `IDEMPOTENCY_WAIT_TIMEOUT_SECONDS` | `30` | Maximum wait for a matching in-flight request |
 | `OPENAI_API_KEY` | none | Required only for the sample agent endpoint |
 | `OPENAI_MODEL` | `gpt-4.1-mini` | OpenAI chat model used by the sample agent |
 | `OPENAI_TIMEOUT_SECONDS` | `30` | OpenAI request timeout |
@@ -209,10 +210,11 @@ Paths below assume the default `API_PREFIX` of `/api/v1`.
 
 ## Enforcement and audit history
 
-`WAF_ENFORCEMENT_MODE=ENFORCE` returns HTTP 403 for a rule violation and never
-calls ToolGateway. `WAF_ENFORCEMENT_MODE=SHADOW` records `WOULD_BLOCK`, then
-continues through ToolGateway. This applies equally to direct tool calls and
-OpenAI-generated calls because both use `ProtectedToolService`.
+`WAF_ENFORCEMENT_MODE=ENFORCE` returns HTTP 403 for a policy violation, or HTTP
+429 for a rate-limit violation, and never calls ToolGateway.
+`WAF_ENFORCEMENT_MODE=SHADOW` records `WOULD_BLOCK`, then continues through
+ToolGateway. This applies equally to direct tool calls and OpenAI-generated calls
+because both use `ProtectedToolService`.
 
 Every intercepted call records a generated request id, agent/session/tool
 identifiers, sanitized parameters, each evaluated rule, effective decision,
@@ -259,8 +261,13 @@ Example tool call:
 ```bash
 curl -X POST http://localhost:8000/api/v1/tool-calls \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: order-request-001" \
   -d '{"agent_id":"agent-1","session_id":"session-1","tool":"search_products","parameters":{"query":"laptop","max_price":1500}}'
 ```
+
+When persistence is enabled, `Idempotency-Key` is atomically claimed in Redis.
+Replaying the same key and payload returns the stored result without executing
+the tool again. Reusing the key with a different payload returns HTTP 409.
 
 Response:
 
@@ -282,8 +289,9 @@ Response:
 Unknown fields, empty identifiers and malformed request bodies are rejected
 with HTTP 422 and code `validation_error`. An unregistered tool returns HTTP
 404 with code `tool_not_found`, and parameters a tool refuses return HTTP 422
-with code `tool_input_error`. WAF blocks return HTTP 403 with code
-`waf_blocked`, plus the blocking rule and a non-sensitive reason.
+with code `tool_input_error`. WAF blocks return HTTP 403, or HTTP 429 for
+rate-limit violations, with code `waf_blocked`, the blocking rule, and a
+non-sensitive reason.
 
 ## Error format
 

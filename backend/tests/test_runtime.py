@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from app import lifecycle
 from app.api.routes import health as health_routes
 from app.config import Settings
 from app.main import create_app
@@ -90,6 +93,27 @@ def test_readiness_returns_503_when_live_check_fails(
     assert response.json()["message"] == "Persistence dependencies are unavailable."
 
 
+def test_readiness_stays_unavailable_after_schema_bootstrap_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database = Mock()
+    database.create_schema.side_effect = RuntimeError("schema bootstrap failed")
+    monkeypatch.setattr(lifecycle, "get_database", lambda: database)
+    monkeypatch.setattr(
+        health_routes,
+        "_check_persistence_dependencies",
+        lambda: None,
+    )
+    application = create_app(persistent_settings())
+
+    with TestClient(application) as client:
+        assert application.state.persistence_bootstrap_ready is False
+        response = client.get("/api/v1/ready")
+
+    assert response.status_code == 503
+    assert response.json()["message"] == "Persistence initialization did not complete."
+
+
 def test_cors_allows_only_configured_frontend_origin() -> None:
     app = create_app(
         Settings(
@@ -105,6 +129,7 @@ def test_cors_allows_only_configured_frontend_origin() -> None:
             headers={
                 "Origin": "https://dashboard.example.com",
                 "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "Idempotency-Key",
             },
         )
         denied = client.options(
@@ -120,6 +145,7 @@ def test_cors_allows_only_configured_frontend_origin() -> None:
         allowed.headers["access-control-allow-origin"]
         == "https://dashboard.example.com"
     )
+    assert "idempotency-key" in allowed.headers["access-control-allow-headers"].lower()
     assert "access-control-allow-origin" not in denied.headers
 
 

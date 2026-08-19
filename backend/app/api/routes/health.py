@@ -23,6 +23,11 @@ def get_readiness(request: Request) -> ReadinessResponse:
     """Run live PostgreSQL and Redis checks when persistence is enabled."""
     settings: Settings = getattr(request.app.state, "settings", None) or get_settings()
     if settings.persistence_enabled:
+        if not getattr(request.app.state, "persistence_bootstrap_ready", False):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Persistence initialization did not complete.",
+            )
         try:
             _check_persistence_dependencies()
             request.app.state.persistence_ready = True

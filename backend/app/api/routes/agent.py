@@ -19,6 +19,7 @@ router = APIRouter(prefix="/agent", tags=["agent"])
     summary="Chat with the protected OpenAI shopping agent",
     responses={
         status.HTTP_403_FORBIDDEN: {"model": AgentWAFBlockResponse},
+        status.HTTP_429_TOO_MANY_REQUESTS: {"model": AgentWAFBlockResponse},
         status.HTTP_502_BAD_GATEWAY: {"model": AgentErrorResponse},
         status.HTTP_503_SERVICE_UNAVAILABLE: {"model": AgentErrorResponse},
     },

@@ -2,14 +2,32 @@
 
 from __future__ import annotations
 
-from collections import defaultdict, deque
+from collections import defaultdict
 from collections.abc import Iterable
 from threading import Lock
 from typing import Protocol
+from uuid import uuid4
 
 
 class RateLimitStore(Protocol):
     """Storage required by the rate-limit rule."""
+
+    def reserve(
+        self,
+        key: str,
+        reservation_id: str,
+        timestamp: float,
+        *,
+        max_calls: int,
+        window_seconds: int,
+    ) -> bool:
+        """Atomically reserve capacity when the sliding window is below its limit."""
+
+    def commit(self, key: str, reservation_id: str, timestamp: float) -> None:
+        """Persist a successful call, creating the reservation when needed."""
+
+    def release(self, key: str, reservation_id: str) -> None:
+        """Remove a reservation for a call that did not execute successfully."""
 
     def count_since(self, key: str, since: float) -> int:
         """Count recorded calls at or after ``since``."""
@@ -44,23 +62,55 @@ class InMemoryRateLimitStore:
     """
 
     def __init__(self) -> None:
-        self._calls: dict[str, deque[float]] = defaultdict(deque)
+        self._calls: dict[str, dict[str, float]] = defaultdict(dict)
         self._lock = Lock()
+
+    def reserve(
+        self,
+        key: str,
+        reservation_id: str,
+        timestamp: float,
+        *,
+        max_calls: int,
+        window_seconds: int,
+    ) -> bool:
+        with self._lock:
+            calls = self._calls[key]
+            self._remove_expired(calls, timestamp - window_seconds)
+            if len(calls) >= max_calls:
+                return False
+            calls[reservation_id] = timestamp
+            return True
+
+    def commit(self, key: str, reservation_id: str, timestamp: float) -> None:
+        with self._lock:
+            self._calls[key][reservation_id] = timestamp
+
+    def release(self, key: str, reservation_id: str) -> None:
+        with self._lock:
+            self._calls[key].pop(reservation_id, None)
 
     def count_since(self, key: str, since: float) -> int:
         with self._lock:
             calls = self._calls[key]
-            while calls and calls[0] < since:
-                calls.popleft()
+            self._remove_expired(calls, since)
             return len(calls)
 
     def add(self, key: str, timestamp: float) -> None:
-        with self._lock:
-            self._calls[key].append(timestamp)
+        self.commit(key, uuid4().hex, timestamp)
 
     def clear(self) -> None:
         with self._lock:
             self._calls.clear()
+
+    @staticmethod
+    def _remove_expired(calls: dict[str, float], since: float) -> None:
+        for reservation_id in [
+            reservation_id
+            for reservation_id, timestamp in calls.items()
+            if timestamp < since
+        ]:
+            del calls[reservation_id]
 
 
 class InMemoryAgentScopeStore:

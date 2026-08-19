@@ -10,6 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.logging_config import get_logger
 from app.schemas.common import ErrorDetail, ErrorResponse
 from app.services.agent_errors import AgentError, AgentWAFBlockedError
+from app.services.idempotency import IdempotencyError
 from app.tools.errors import ToolError
 
 logger = get_logger(__name__)
@@ -114,6 +115,19 @@ async def handle_agent_error(request: Request, exc: AgentError) -> JSONResponse:
     )
 
 
+async def handle_idempotency_error(
+    request: Request, exc: IdempotencyError
+) -> JSONResponse:
+    """Return stable conflict/unavailable responses for idempotent calls."""
+    logger.info(
+        "Idempotency request failed: %s %s code=%s",
+        request.method,
+        request.url.path,
+        exc.code,
+    )
+    return _json_error(exc.status_code, exc.code, exc.message)
+
+
 async def handle_unexpected_exception(request: Request, exc: Exception) -> JSONResponse:
     """Log the real failure and return an opaque HTTP 500 to the caller."""
     logger.exception(
@@ -131,5 +145,6 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(RequestValidationError, handle_validation_error)
     app.add_exception_handler(ToolError, handle_tool_error)
     app.add_exception_handler(AgentError, handle_agent_error)
+    app.add_exception_handler(IdempotencyError, handle_idempotency_error)
     app.add_exception_handler(StarletteHTTPException, handle_http_exception)
     app.add_exception_handler(Exception, handle_unexpected_exception)

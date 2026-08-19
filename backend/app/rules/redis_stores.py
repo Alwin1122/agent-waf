@@ -7,6 +7,26 @@ import uuid
 
 from app.redis_client import RedisClient
 
+RATE_LIMIT_RESERVE_SCRIPT = """
+local key = KEYS[1]
+local now = tonumber(ARGV[1])
+local since = tonumber(ARGV[2])
+local max_calls = tonumber(ARGV[3])
+local reservation_id = ARGV[4]
+local ttl_seconds = tonumber(ARGV[5])
+
+redis.call("ZREMRANGEBYSCORE", key, "-inf", "(" .. since)
+local count = redis.call("ZCARD", key)
+if count >= max_calls then
+    redis.call("EXPIRE", key, ttl_seconds)
+    return 0
+end
+
+redis.call("ZADD", key, now, reservation_id)
+redis.call("EXPIRE", key, ttl_seconds)
+return 1
+"""
+
 
 class RedisRateLimitStore:
     """Sliding-window timestamps persisted in Redis sorted sets."""
@@ -20,6 +40,38 @@ class RedisRateLimitStore:
         self._redis = redis_client
         self._ttl_seconds = ttl_seconds
 
+    def reserve(
+        self,
+        key: str,
+        reservation_id: str,
+        timestamp: float,
+        *,
+        max_calls: int,
+        window_seconds: int,
+    ) -> bool:
+        """Atomically prune, count and reserve one slot with a Lua script."""
+        result = self._redis.client.eval(
+            RATE_LIMIT_RESERVE_SCRIPT,
+            1,
+            self._key(key),
+            timestamp,
+            timestamp - window_seconds,
+            max_calls,
+            reservation_id,
+            self._ttl_seconds,
+        )
+        return bool(result)
+
+    def commit(self, key: str, reservation_id: str, timestamp: float) -> None:
+        redis_key = self._key(key)
+        pipeline = self._redis.client.pipeline(transaction=True)
+        pipeline.zadd(redis_key, {reservation_id: timestamp})
+        pipeline.expire(redis_key, self._ttl_seconds)
+        pipeline.execute()
+
+    def release(self, key: str, reservation_id: str) -> None:
+        self._redis.client.zrem(self._key(key), reservation_id)
+
     def count_since(self, key: str, since: float) -> int:
         redis_key = self._key(key)
         pipeline = self._redis.client.pipeline(transaction=True)
@@ -30,12 +82,7 @@ class RedisRateLimitStore:
         return int(count)
 
     def add(self, key: str, timestamp: float) -> None:
-        redis_key = self._key(key)
-        member = f"{timestamp}:{uuid.uuid4().hex}"
-        pipeline = self._redis.client.pipeline(transaction=True)
-        pipeline.zadd(redis_key, {member: timestamp})
-        pipeline.expire(redis_key, self._ttl_seconds)
-        pipeline.execute()
+        self.commit(key, f"{timestamp}:{uuid.uuid4().hex}", timestamp)
 
     def _key(self, key: str) -> str:
         digest = hashlib.sha256(key.encode("utf-8")).hexdigest()

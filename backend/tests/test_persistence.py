@@ -13,7 +13,11 @@ from app.config import Settings
 from app.db.database import Database
 from app.db.models import Agent, AuditLog, Base, Policy, RegisteredTool
 from app.db.repositories import PostgresAuditRepository, PostgresPolicyRepository
-from app.redis_client import RedisClient, RedisIdempotencyStore
+from app.redis_client import (
+    IdempotencyState,
+    RedisClient,
+    RedisIdempotencyStore,
+)
 from app.rules.redis_stores import RedisRateLimitStore, RedisSequenceStateStore
 
 
@@ -185,6 +189,28 @@ def test_redis_rate_limit_store_uses_sorted_set_pipeline() -> None:
     pipeline.expire.assert_called_once()
 
 
+def test_redis_rate_limit_reservation_uses_atomic_lua_script() -> None:
+    client = Mock()
+    client.eval.return_value = 1
+    store = RedisRateLimitStore(redis_manager(client), ttl_seconds=120)
+
+    reserved = store.reserve(
+        "agent-1\x1fsearch_products",
+        "reservation-1",
+        160.0,
+        max_calls=3,
+        window_seconds=60,
+    )
+
+    assert reserved is True
+    script, key_count, redis_key, *arguments = client.eval.call_args.args
+    assert 'redis.call("ZCARD", key)' in script
+    assert 'redis.call("ZADD", key, now, reservation_id)' in script
+    assert key_count == 1
+    assert redis_key.startswith("test-waf:rate-limit:")
+    assert arguments == [160.0, 100.0, 3, "reservation-1", 120]
+
+
 def test_redis_sequence_store_reads_and_appends_session_history() -> None:
     client = Mock()
     client.lrange.return_value = ["authenticate", "get_customer"]
@@ -217,3 +243,23 @@ def test_idempotency_store_claims_hashed_namespaced_key() -> None:
         "nx": True,
         "ex": 300,
     }
+
+
+def test_idempotency_request_claim_uses_atomic_lua_state_machine() -> None:
+    client = Mock()
+    client.eval.return_value = ["CLAIMED", ""]
+    store = RedisIdempotencyStore(
+        redis_manager(client),
+        ttl_seconds=300,
+    )
+
+    record = store.begin_request("secret-client-key", "fingerprint-1")
+
+    assert record.state is IdempotencyState.CLAIMED
+    script, key_count, redis_key, fingerprint, ttl = client.eval.call_args.args
+    assert 'redis.call("HSET", key' in script
+    assert key_count == 1
+    assert redis_key.startswith("test-waf:idempotency:")
+    assert "secret-client-key" not in redis_key
+    assert fingerprint == "fingerprint-1"
+    assert ttl == 300
