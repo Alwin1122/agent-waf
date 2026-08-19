@@ -1,0 +1,106 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+    image: agent-waf-frontend:latest
+    container_name: agent-waf-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      BACKEND_API_URL: http://backend:${BACKEND_PORT:-8000}
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://localhost:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+    image: agent-waf-backend:latest
+    container_name: agent-waf-backend
+    ports:
+      - "${BACKEND_PORT:-8000}:${BACKEND_PORT:-8000}"
+    environment:
+      APP_NAME: ${APP_NAME:-Agent WAF}
+      APP_ENV: ${APP_ENV:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      API_PREFIX: ${API_PREFIX:-/api/v1}
+      HOST: 0.0.0.0
+      PORT: ${BACKEND_PORT:-8000}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS:-false}
+      PERSISTENCE_ENABLED: "true"
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-agent_waf}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-agent_waf}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD}@redis:6379/0
+      REDIS_KEY_PREFIX: ${REDIS_KEY_PREFIX:-agent-waf}
+      DATABASE_CREATE_TABLES: ${DATABASE_CREATE_TABLES:-true}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+      OPENAI_TIMEOUT_SECONDS: ${OPENAI_TIMEOUT_SECONDS:-30}
+      WAF_ENFORCEMENT_MODE: ${WAF_ENFORCEMENT_MODE:-ENFORCE}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import os, urllib.request; urllib.request.urlopen('http://localhost:' + os.environ.get('PORT', '8000') + '/api/v1/ready')
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-agent_waf}
+      POSTGRES_USER: ${POSTGRES_USER:-agent_waf}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - redis-cli -a "$$REDIS_PASSWORD" ping
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
