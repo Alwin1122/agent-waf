@@ -13,6 +13,10 @@ Terraform under `infra/terraform/`.
 
 **Live demo (AWS):** http://agent-waf-dev-alb-120267385.ap-south-1.elb.amazonaws.com
 
+The live URL is currently CIDR-restricted to specific IPs as a security measure. 
+It may not be reachable from your network — please refer to the demo video for a 
+full live walkthrough, or reach out and I can open access for verification.
+
 The backend stays private inside the VPC. The Next.js frontend proxies all API
 traffic (`/backend/api/v1/*`) to the backend over AWS Cloud Map service
 discovery.
