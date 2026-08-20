@@ -1,5 +1,9 @@
 locals {
-  backend_environment = [
+  backend_openai_env = var.openai_base_url != "" ? [
+    { name = "OPENAI_BASE_URL", value = var.openai_base_url },
+  ] : []
+
+  backend_environment = concat([
     { name = "APP_NAME", value = var.app_name },
     { name = "APP_ENV", value = var.app_env },
     { name = "LOG_LEVEL", value = var.log_level },
@@ -21,12 +25,13 @@ locals {
     { name = "OPENAI_MODEL", value = var.openai_model },
     { name = "OPENAI_TIMEOUT_SECONDS", value = tostring(var.openai_timeout_seconds) },
     { name = "WAF_ENFORCEMENT_MODE", value = var.waf_enforcement_mode },
-  ]
+  ], local.backend_openai_env)
 
   backend_secrets = concat(
     [
       { name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.database_url.arn },
       { name = "REDIS_URL", valueFrom = aws_secretsmanager_secret.redis_url.arn },
+      { name = "API_AUTH_KEY", valueFrom = aws_secretsmanager_secret.api_auth_key.arn },
     ],
     var.openai_api_key_secret_enabled ? [
       { name = "OPENAI_API_KEY", valueFrom = aws_secretsmanager_secret.openai_api_key[0].arn },

@@ -345,6 +345,12 @@ variable "openai_timeout_seconds" {
   default     = 30
 }
 
+variable "openai_base_url" {
+  description = "Optional OpenAI-compatible API base URL (e.g. Gemini). Leave empty for api.openai.com."
+  type        = string
+  default     = ""
+}
+
 variable "openai_api_key_secret_enabled" {
   description = "Inject OPENAI_API_KEY from Secrets Manager. Update the secret value manually after apply."
   type        = bool

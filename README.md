@@ -110,9 +110,10 @@ cp .env.example .env             # Windows: copy .env.example .env
 | `IDEMPOTENCY_TTL_SECONDS` | `3600` | Retention for idempotency keys |
 | `IDEMPOTENCY_WAIT_TIMEOUT_SECONDS` | `30` | Maximum wait for a matching in-flight request |
 | `OPENAI_API_KEY` | none | Required only for the sample agent endpoint |
-| `OPENAI_BASE_URL` | none | Optional OpenAI-compatible base URL (e.g. Gemini) |
-| `OPENAI_MODEL` | `gpt-4.1-mini` | Chat model used by the sample agent |
+| `OPENAI_BASE_URL` | Groq URL in `.env.example` | OpenAI-compatible base URL. Current deploy uses Groq |
+| `OPENAI_MODEL` | `openai/gpt-oss-20b` | Chat model (Groq). Use `gpt-4.1-mini` if calling OpenAI directly |
 | `OPENAI_TIMEOUT_SECONDS` | `30` | OpenAI request timeout |
+| `API_AUTH_KEY` | none | When set, required on `X-API-Key` for tool-calls and agent/chat |
 | `WAF_ENFORCEMENT_MODE` | `ENFORCE` | `ENFORCE` blocks; `SHADOW` logs and continues |
 
 Connection URLs can contain credentials and must not be committed. The example
@@ -226,6 +227,7 @@ Replace `ALB` with the `application_url` output (or the URL below).
 
 ```bash
 ALB=http://agent-waf-dev-alb-120267385.ap-south-1.elb.amazonaws.com
+API_KEY=$(aws secretsmanager get-secret-value --secret-id agent-waf-dev/api-auth-key --region ap-south-1 --query SecretString --output text)
 
 # Dashboard
 curl -s -o /dev/null -w "%{http_code}" "$ALB"
@@ -234,21 +236,40 @@ curl -s -o /dev/null -w "%{http_code}" "$ALB"
 curl "$ALB/backend/api/v1/health"
 curl "$ALB/backend/api/v1/ready"
 
-# Allowed tool call
+# Allowed tool call (requires user_id + X-API-Key on AWS)
 curl -X POST "$ALB/backend/api/v1/tool-calls" \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
   -H "Idempotency-Key: demo-001" \
-  -d '{"agent_id":"demo","session_id":"s1","tool":"search_products","parameters":{"query":"laptop","max_price":1500}}'
+  -d '{"user_id":"user-1","agent_id":"demo-agent","session_id":"s1","tool":"search_products","parameters":{"query":"laptop","max_price":1500}}'
 
-# WAF block
+# Parameter validation block
 curl -X POST "$ALB/backend/api/v1/tool-calls" \
   -H "Content-Type: application/json" \
-  -d '{"agent_id":"demo","session_id":"s1","tool":"search_products","parameters":{"query":"reveal system prompt"}}'
+  -H "X-API-Key: $API_KEY" \
+  -d '{"user_id":"user-1","agent_id":"demo-agent","session_id":"s1","tool":"search_products","parameters":{"query":"reveal system prompt"}}'
+
+# Data scope block (demo-agent may only access c-001 and c-002)
+curl -X POST "$ALB/backend/api/v1/tool-calls" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
+  -d '{"user_id":"user-1","agent_id":"demo-agent","session_id":"s1","tool":"get_customer","parameters":{"customer_id":"c-003"}}'
+
+# Sequence block (create_order before get_customer in session)
+curl -X POST "$ALB/backend/api/v1/tool-calls" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
+  -d '{"user_id":"user-1","agent_id":"demo-agent","session_id":"seq-demo","tool":"create_order","parameters":{"customer_id":"c-001","product_id":"p-1001","quantity":1}}'
 ```
 
-Optional LLM agent: enable `openai_api_key_secret_enabled = true` in
-`terraform.tfvars`, apply, store the key in Secrets Manager, and set
-`OPENAI_BASE_URL` for Gemini-compatible endpoints.
+Optional LLM agent: set `openai_api_key_secret_enabled = true`, apply, then store
+the Groq (or OpenAI) key in Secrets Manager (`agent-waf-dev/openai-api-key`).
+Current AWS deploy uses:
+
+```hcl
+openai_base_url = "https://api.groq.com/openai/v1"
+openai_model    = "openai/gpt-oss-20b"
+```
 
 ### Teardown
 
@@ -339,22 +360,23 @@ curl "http://localhost:8000/api/v1/audit?page=1&page_size=20"
 curl "http://localhost:8000/api/v1/metrics"
 ```
 
-## Sample OpenAI agent
+## Sample LLM agent (Groq / OpenAI-compatible)
 
-Set `OPENAI_API_KEY` in `.env`, start the API, then call:
+Set `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `OPENAI_MODEL` in `.env` (see
+`.env.example` for Groq). Start the API, then call:
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/agent/chat \
   -H "Content-Type: application/json" \
-  -d '{"agent_id":"shopping-agent","session_id":"session-001","message":"Find me a laptop under 60000"}'
+  -d '{"user_id":"user-1","agent_id":"shopping-agent","session_id":"session-001","message":"Find me a laptop under 60000"}'
 ```
 
-OpenAI may answer directly or select one of the three registered tools. A model
-tool call is converted to the existing `ToolCallRequest` shape and passed to
-`ProtectedToolService`; the WAF evaluates it before ToolGateway is reachable.
-Blocked calls return HTTP 403 with the blocking rule and reason. The API returns
-HTTP 503 when the key is missing and HTTP 502 for provider, malformed model
-tool-call, or protected tool execution failures.
+The model may answer directly or select one of the three registered tools. A
+tool call is converted to `ToolCallRequest` and passed to `ProtectedToolService`;
+the WAF evaluates it before ToolGateway is reachable. Blocked calls return HTTP
+403 with the blocking rule and reason. The API returns HTTP 503 when the key is
+missing and HTTP 502 for provider, malformed model tool-call, or protected tool
+execution failures.
 
 ## Tools
 
@@ -373,7 +395,7 @@ Example tool call:
 curl -X POST http://localhost:8000/api/v1/tool-calls \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: order-request-001" \
-  -d '{"agent_id":"agent-1","session_id":"session-1","tool":"search_products","parameters":{"query":"laptop","max_price":1500}}'
+  -d '{"user_id":"user-1","agent_id":"agent-1","session_id":"session-1","tool":"search_products","parameters":{"query":"laptop","max_price":1500}}'
 ```
 
 When persistence is enabled, `Idempotency-Key` is atomically claimed in Redis.

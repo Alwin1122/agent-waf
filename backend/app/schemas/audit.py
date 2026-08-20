@@ -11,6 +11,7 @@ from pydantic import BaseModel
 class AuditEventResponse(BaseModel):
     timestamp: datetime
     request_id: str | None
+    user_id: str | None = None
     agent_id: str
     session_id: str
     tool: str

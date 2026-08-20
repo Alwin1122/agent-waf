@@ -77,6 +77,7 @@ class InMemoryIdempotencyState:
 
 def request(query: str = "laptop") -> ToolCallRequest:
     return ToolCallRequest(
+        user_id="user-1",
         agent_id="agent-1",
         session_id="session-1",
         tool="search_products",

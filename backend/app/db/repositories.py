@@ -95,6 +95,7 @@ class PostgresAuditRepository:
         tool_name: str,
         decision: str,
         reason: str,
+        user_id: str | None = None,
         rule: str | None = None,
         context: dict[str, Any] | None = None,
         request_id: str | None = None,
@@ -108,6 +109,7 @@ class PostgresAuditRepository:
                 AuditLog(
                     agent_id=agent_id,
                     session_id=session_id,
+                    user_id=user_id,
                     tool_name=tool_name,
                     decision=decision,
                     rule=rule,
@@ -161,6 +163,7 @@ def _audit_to_dict(event: AuditLog) -> dict[str, Any]:
     return {
         "timestamp": event.created_at,
         "request_id": event.request_id,
+        "user_id": event.user_id,
         "agent_id": event.agent_id,
         "session_id": event.session_id,
         "tool": event.tool_name,
@@ -177,7 +180,7 @@ def seed_core_records(
     session_factory: SessionFactory,
     tools: list[dict[str, Any]],
 ) -> None:
-    """Idempotently register built-in tools and the default rate policy."""
+    """Idempotently register built-in tools and default WAF policies."""
     with session_factory() as session:
         for descriptor in tools:
             existing = session.get(RegisteredTool, descriptor["name"])
@@ -189,20 +192,42 @@ def seed_core_records(
                     )
                 )
 
-        default_policy = session.scalar(
-            select(Policy).where(
-                Policy.name == "default-search-products-rate-limit"
-            )
-        )
-        if default_policy is None:
+        demo_agent = session.get(Agent, "demo-agent")
+        if demo_agent is None:
             session.add(
-                Policy(
-                    name="default-search-products-rate-limit",
-                    tool_name="search_products",
-                    rate_limit_max_calls=3,
-                    rate_limit_window_seconds=60,
-                )
+                Agent(id="demo-agent", name="Demo Shopping Agent"),
             )
+
+        policies = (
+            (
+                "default-search-products-rate-limit",
+                {
+                    "tool_name": "search_products",
+                    "rate_limit_max_calls": 3,
+                    "rate_limit_window_seconds": 60,
+                },
+            ),
+            (
+                "demo-agent-customer-scope",
+                {
+                    "agent_id": "demo-agent",
+                    "customer_ids": ["c-001", "c-002"],
+                },
+            ),
+            (
+                "default-order-sequence",
+                {
+                    "required_sequence": ["get_customer", "create_order"],
+                },
+            ),
+        )
+        for policy_name, fields in policies:
+            existing = session.scalar(
+                select(Policy).where(Policy.name == policy_name)
+            )
+            if existing is None:
+                session.add(Policy(name=policy_name, **fields))
+
         session.commit()
 
 

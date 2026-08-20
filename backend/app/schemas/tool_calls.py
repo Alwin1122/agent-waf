@@ -14,6 +14,7 @@ IDENTIFIER_MAX_LENGTH = 128
 class ToolCallRequest(StrictModel):
     """A tool invocation submitted by an AI agent for inspection."""
 
+    user_id: str = Field(min_length=1, max_length=IDENTIFIER_MAX_LENGTH)
     agent_id: str = Field(min_length=1, max_length=IDENTIFIER_MAX_LENGTH)
     session_id: str = Field(min_length=1, max_length=IDENTIFIER_MAX_LENGTH)
     tool: str = Field(min_length=1, max_length=IDENTIFIER_MAX_LENGTH)

@@ -114,6 +114,7 @@ class AuditLog(Base):
     )
     agent_id: Mapped[str] = mapped_column(String(128), index=True, nullable=False)
     session_id: Mapped[str] = mapped_column(String(128), index=True, nullable=False)
+    user_id: Mapped[str | None] = mapped_column(String(128), index=True)
     tool_name: Mapped[str] = mapped_column(String(128), index=True, nullable=False)
     decision: Mapped[str] = mapped_column(String(16), nullable=False)
     rule: Mapped[str | None] = mapped_column(String(128))

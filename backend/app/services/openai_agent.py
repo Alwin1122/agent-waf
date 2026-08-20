@@ -56,6 +56,7 @@ class OpenAIAgentService:
     def chat(
         self,
         *,
+        user_id: str,
         agent_id: str,
         session_id: str,
         message: str,
@@ -86,6 +87,7 @@ class OpenAIAgentService:
         try:
             outcome = self._protected_tools.execute(
                 ToolCallRequest(
+                    user_id=user_id,
                     agent_id=agent_id,
                     session_id=session_id,
                     tool=model_call.name,

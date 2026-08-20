@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends, status
 
+from app.api.auth import require_api_key
 from app.schemas.agent import (
     AgentChatRequest,
     AgentChatResponse,
@@ -26,10 +27,12 @@ router = APIRouter(prefix="/agent", tags=["agent"])
 )
 def chat(
     request: AgentChatRequest,
+    _: None = Depends(require_api_key),
     agent: OpenAIAgentService = Depends(get_openai_agent_service),
 ) -> AgentChatResponse:
     """Let OpenAI choose a tool, but execute it only through Agent WAF."""
     result = agent.chat(
+        user_id=request.user_id,
         agent_id=request.agent_id,
         session_id=request.session_id,
         message=request.message,

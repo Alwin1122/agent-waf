@@ -12,6 +12,7 @@ from app.schemas.tool_calls import IDENTIFIER_MAX_LENGTH
 
 
 class AgentChatRequest(StrictModel):
+    user_id: str = Field(min_length=1, max_length=IDENTIFIER_MAX_LENGTH)
     agent_id: str = Field(min_length=1, max_length=IDENTIFIER_MAX_LENGTH)
     session_id: str = Field(min_length=1, max_length=IDENTIFIER_MAX_LENGTH)
     message: str = Field(min_length=1, max_length=8_000)

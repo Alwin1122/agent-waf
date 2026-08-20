@@ -20,6 +20,7 @@ class WAFRequest(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    user_id: str
     agent_id: str
     session_id: str
     tool: str

@@ -173,6 +173,7 @@ class ProtectedToolService:
         started_at = self._clock()
         request_id = self._request_id_factory()
         waf_request = WAFRequest(
+            user_id=request.user_id,
             agent_id=request.agent_id,
             session_id=request.session_id,
             tool=request.tool,
@@ -259,6 +260,7 @@ class ProtectedToolService:
         blocked = decision.blocked_by
         self._audit.record(
             request_id=request_id,
+            user_id=request.user_id,
             agent_id=request.agent_id,
             session_id=request.session_id,
             tool_name=request.tool,

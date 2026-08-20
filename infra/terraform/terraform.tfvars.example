@@ -15,8 +15,11 @@ allowed_ingress_cidrs = ["YOUR.PUBLIC.IP/32"]
 # Budget alerts require verified email addresses in the AWS account.
 budget_notification_emails = ["you@example.com"]
 
-# Optional: enable OpenAI secret injection and update the secret value after apply.
+# Optional LLM secret injection. After apply, put the provider key in Secrets Manager.
+# Current deploy uses Groq via the OpenAI-compatible endpoint:
 # openai_api_key_secret_enabled = true
+# openai_base_url = "https://api.groq.com/openai/v1"
+# openai_model    = "openai/gpt-oss-20b"
 
 # ECR image tags (immutable — bump on each release)
 # frontend_image_tag = "latest"
@@ -24,3 +27,5 @@ budget_notification_emails = ["you@example.com"]
 
 # RDS engine version must match an available version in your region
 # db_engine_version = "16.14"
+
+# API_AUTH_KEY is auto-generated in Secrets Manager on apply (see api_auth_key_secret_arn output).

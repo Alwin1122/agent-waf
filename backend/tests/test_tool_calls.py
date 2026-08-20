@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 VALID_PAYLOAD: dict[str, Any] = {
+    "user_id": "user-1",
     "agent_id": "agent-1",
     "session_id": "session-1",
     "tool": "search_products",

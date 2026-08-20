@@ -303,7 +303,7 @@ function AuditRow({ event }: { event: AuditEvent }) {
       <td className="px-4 py-3.5">
         <p className="font-medium text-slate-800">{event.agent_id}</p>
         <p className="mt-0.5 max-w-40 truncate text-[11px] text-slate-400">
-          {event.session_id}
+          {event.user_id ? `user ${event.user_id}` : "anonymous"} · {event.session_id}
         </p>
       </td>
       <td className="px-4 py-3.5">

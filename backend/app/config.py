@@ -48,7 +48,9 @@ class Settings(BaseSettings):
     redis_state_ttl_seconds: int = 86_400
     idempotency_ttl_seconds: int = 3_600
     idempotency_wait_timeout_seconds: int = 30
+    api_auth_key: SecretStr | None = None
     openai_api_key: SecretStr | None = None
+    openai_base_url: str | None = None
     openai_model: str = "gpt-4.1-mini"
     openai_timeout_seconds: int = 30
     waf_enforcement_mode: Literal["ENFORCE", "SHADOW"] = "ENFORCE"

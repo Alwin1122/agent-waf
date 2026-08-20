@@ -78,6 +78,11 @@ output "redis_url_secret_arn" {
   value       = aws_secretsmanager_secret.redis_url.arn
 }
 
+output "api_auth_key_secret_arn" {
+  description = "Secrets Manager ARN for API_AUTH_KEY (X-API-Key header)."
+  value       = aws_secretsmanager_secret.api_auth_key.arn
+}
+
 output "openai_api_key_secret_arn" {
   description = "Secrets Manager ARN for OPENAI_API_KEY when secret injection is enabled."
   value       = var.openai_api_key_secret_enabled ? aws_secretsmanager_secret.openai_api_key[0].arn : null

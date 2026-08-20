@@ -19,9 +19,11 @@ async function proxyRequest(
   const accept = request.headers.get("Accept");
   const contentType = request.headers.get("Content-Type");
   const idempotencyKey = request.headers.get("Idempotency-Key");
+  const apiKey = request.headers.get("X-API-Key");
   if (accept) headers.set("Accept", accept);
   if (contentType) headers.set("Content-Type", contentType);
   if (idempotencyKey) headers.set("Idempotency-Key", idempotencyKey);
+  if (apiKey) headers.set("X-API-Key", apiKey);
 
   const init: RequestInit = {
     method: request.method,

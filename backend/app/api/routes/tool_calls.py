@@ -8,6 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, status
 from fastapi.responses import JSONResponse
 
+from app.api.auth import require_api_key
 from app.logging_config import get_logger
 from app.rules.models import WAFBlockResponse
 from app.schemas.common import ErrorResponse
@@ -41,6 +42,7 @@ async def submit_tool_call(
         str | None,
         Header(alias="Idempotency-Key", min_length=1, max_length=256),
     ] = None,
+    _: None = Depends(require_api_key),
     protected_tools: ProtectedToolService = Depends(get_protected_tool_service),
 ) -> ToolCallResponse | JSONResponse:
     """Inspect the call with the WAF, then run an allowed tool.

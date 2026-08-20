@@ -21,12 +21,14 @@ from app.rules.stores import (
 
 def request(
     *,
+    user_id: str = "user-1",
     agent_id: str = "agent-1",
     session_id: str = "session-1",
     tool: str = "search_products",
     parameters: dict | None = None,
 ) -> WAFRequest:
     return WAFRequest(
+        user_id=user_id,
         agent_id=agent_id,
         session_id=session_id,
         tool=tool,

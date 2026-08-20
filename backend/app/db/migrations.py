@@ -23,6 +23,8 @@ def migrate_audit_log_schema(engine: Engine) -> None:
         "ADD COLUMN IF NOT EXISTS latency_ms DOUBLE PRECISION",
         "CREATE INDEX IF NOT EXISTS ix_audit_logs_request_id "
         "ON audit_logs (request_id)",
+        "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_id VARCHAR(128)",
+        "CREATE INDEX IF NOT EXISTS ix_audit_logs_user_id ON audit_logs (user_id)",
     )
     with engine.begin() as connection:
         for statement in statements:

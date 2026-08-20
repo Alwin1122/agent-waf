@@ -41,6 +41,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "Authorization",
                 "Content-Type",
                 "Idempotency-Key",
+                "X-API-Key",
                 "X-Request-ID",
             ],
         )

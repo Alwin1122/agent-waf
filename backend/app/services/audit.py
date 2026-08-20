@@ -22,6 +22,7 @@ class AuditRepository(Protocol):
         tool_name: str,
         decision: str,
         reason: str,
+        user_id: str | None = None,
         rule: str | None = None,
         context: dict[str, Any] | None = None,
         request_id: str | None = None,
@@ -53,6 +54,7 @@ class InMemoryAuditRepository:
         tool_name: str,
         decision: str,
         reason: str,
+        user_id: str | None = None,
         rule: str | None = None,
         context: dict[str, Any] | None = None,
         request_id: str | None = None,
@@ -64,6 +66,7 @@ class InMemoryAuditRepository:
         event = {
             "timestamp": datetime.now(timezone.utc),
             "request_id": request_id or str(uuid4()),
+            "user_id": user_id,
             "agent_id": agent_id,
             "session_id": session_id,
             "tool": tool_name,

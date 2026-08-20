@@ -47,6 +47,7 @@ data "aws_iam_policy_document" "ecs_task_execution_secrets" {
       [
         aws_secretsmanager_secret.database_url.arn,
         aws_secretsmanager_secret.redis_url.arn,
+        aws_secretsmanager_secret.api_auth_key.arn,
       ],
       var.openai_api_key_secret_enabled ? [aws_secretsmanager_secret.openai_api_key[0].arn] : [],
     )

@@ -88,8 +88,11 @@ def get_openai_chat_client() -> OpenAIChatClient:
         raise AgentConfigurationError(
             "OPENAI_API_KEY is required to use the sample agent."
         )
-    client = OpenAI(
-        api_key=settings.openai_api_key.get_secret_value(),
-        timeout=settings.openai_timeout_seconds,
-    )
+    client_kwargs: dict[str, Any] = {
+        "api_key": settings.openai_api_key.get_secret_value(),
+        "timeout": settings.openai_timeout_seconds,
+    }
+    if settings.openai_base_url:
+        client_kwargs["base_url"] = settings.openai_base_url.rstrip("/")
+    client = OpenAI(**client_kwargs)
     return OpenAIChatClient(client, model=settings.openai_model)

@@ -10,6 +10,7 @@ export interface RuleResult {
 export interface AuditEvent {
   timestamp: string;
   request_id: string | null;
+  user_id: string | null;
   agent_id: string;
   session_id: string;
   tool: string;

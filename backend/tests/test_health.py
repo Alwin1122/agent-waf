@@ -21,6 +21,7 @@ def test_tool_call_valid(client: TestClient, api_prefix: str) -> None:
     response = client.post(
         f"{api_prefix}/tool-calls",
         json={
+            "user_id": "user-1",
             "agent_id": "test-agent",
             "session_id": "test-session",
             "tool": "search_products",

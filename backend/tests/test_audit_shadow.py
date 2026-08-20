@@ -21,6 +21,7 @@ from app.tools.errors import ToolExecutionError
 
 def safe_request(**parameters: object) -> ToolCallRequest:
     return ToolCallRequest(
+        user_id="user-1",
         agent_id="agent-1",
         session_id="session-1",
         tool="search_products",

@@ -11,6 +11,11 @@ resource "random_password" "redis_auth" {
   special = false
 }
 
+resource "random_password" "api_auth_key" {
+  length  = 48
+  special = false
+}
+
 resource "aws_secretsmanager_secret" "database_url" {
   name                    = "${local.name_prefix}/database-url"
   recovery_window_in_days = 0
@@ -27,6 +32,20 @@ resource "aws_secretsmanager_secret" "redis_url" {
   tags = {
     Name = "${local.name_prefix}-redis-url"
   }
+}
+
+resource "aws_secretsmanager_secret" "api_auth_key" {
+  name                    = "${local.name_prefix}/api-auth-key"
+  recovery_window_in_days = 0
+
+  tags = {
+    Name = "${local.name_prefix}-api-auth-key"
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "api_auth_key" {
+  secret_id     = aws_secretsmanager_secret.api_auth_key.id
+  secret_string = random_password.api_auth_key.result
 }
 
 resource "aws_secretsmanager_secret" "openai_api_key" {

@@ -18,6 +18,7 @@ from app.services.protected_tools import ProtectedToolService
 from app.services.tool_gateway import get_tool_gateway
 
 PAYLOAD = {
+    "user_id": "user-1",
     "agent_id": "agent-1",
     "session_id": "session-1",
     "tool": "search_products",
@@ -109,6 +110,7 @@ def test_concurrent_rate_limit_allows_exactly_configured_capacity() -> None:
     def submit(index: int) -> bool:
         return service.execute(
             ToolCallRequest(
+                user_id="user-1",
                 agent_id="agent-1",
                 session_id=f"session-{index}",
                 tool="search_products",
