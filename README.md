@@ -16,6 +16,8 @@ Terraform under `infra/terraform/`.
 The live URL is currently CIDR-restricted to specific IPs as a security measure. 
 It may not be reachable from your network — please refer to the demo video for a 
 full live walkthrough, or reach out and I can open access for verification.
+<img width="1881" height="800" alt="image" src="https://github.com/user-attachments/assets/4fdd8165-b2f6-42de-9807-6e07a93143c2" />
+
 
 The backend stays private inside the VPC. The Next.js frontend proxies all API
 traffic (`/backend/api/v1/*`) to the backend over AWS Cloud Map service
