@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const DEFAULT_BACKEND_URL = "http://127.0.0.1:8000";
 
-export async function GET(
+async function proxyRequest(
   request: NextRequest,
   context: { params: Promise<{ path: string[] }> },
 ) {
@@ -15,11 +15,25 @@ export async function GET(
   const target = new URL(`${baseUrl}/${backendPath}`);
   target.search = request.nextUrl.search;
 
+  const headers = new Headers();
+  const accept = request.headers.get("Accept");
+  const contentType = request.headers.get("Content-Type");
+  const idempotencyKey = request.headers.get("Idempotency-Key");
+  if (accept) headers.set("Accept", accept);
+  if (contentType) headers.set("Content-Type", contentType);
+  if (idempotencyKey) headers.set("Idempotency-Key", idempotencyKey);
+
+  const init: RequestInit = {
+    method: request.method,
+    cache: "no-store",
+    headers,
+  };
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    init.body = await request.arrayBuffer();
+  }
+
   try {
-    const response = await fetch(target, {
-      cache: "no-store",
-      headers: { Accept: "application/json" },
-    });
+    const response = await fetch(target, init);
     return new NextResponse(await response.arrayBuffer(), {
       status: response.status,
       headers: {
@@ -37,4 +51,39 @@ export async function GET(
       { status: 502 },
     );
   }
+}
+
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ path: string[] }> },
+) {
+  return proxyRequest(request, context);
+}
+
+export async function POST(
+  request: NextRequest,
+  context: { params: Promise<{ path: string[] }> },
+) {
+  return proxyRequest(request, context);
+}
+
+export async function PUT(
+  request: NextRequest,
+  context: { params: Promise<{ path: string[] }> },
+) {
+  return proxyRequest(request, context);
+}
+
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ path: string[] }> },
+) {
+  return proxyRequest(request, context);
+}
+
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ path: string[] }> },
+) {
+  return proxyRequest(request, context);
 }

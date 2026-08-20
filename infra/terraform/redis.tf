@@ -36,8 +36,7 @@ resource "aws_elasticache_replication_group" "main" {
   at_rest_encryption_enabled = true
   transit_encryption_enabled = false
 
-  auth_token                 = random_password.redis_auth.result
-  auth_token_update_strategy = "SET"
+  # AUTH tokens require transit encryption. Redis stays private via security groups only.
 
   apply_immediately = true
 

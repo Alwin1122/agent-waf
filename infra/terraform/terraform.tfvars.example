@@ -17,3 +17,10 @@ budget_notification_emails = ["you@example.com"]
 
 # Optional: enable OpenAI secret injection and update the secret value after apply.
 # openai_api_key_secret_enabled = true
+
+# ECR image tags (immutable — bump on each release)
+# frontend_image_tag = "latest"
+# backend_image_tag  = "latest"
+
+# RDS engine version must match an available version in your region
+# db_engine_version = "16.14"

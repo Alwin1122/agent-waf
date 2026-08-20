@@ -5,14 +5,17 @@ call. Every tool invocation passes through this service so that policies such as
 rate limiting, parameter validation, data scope and call-sequence enforcement can
 be evaluated before a tool ever runs.
 
-**This repository currently contains Phases 1 through 8:** the API foundation,
-tool gateway, WAF rule engine, PostgreSQL audit history, Redis runtime state, a
-sample OpenAI shopping agent, enforce/shadow policy modes, and a Next.js
-operations dashboard, all packaged as a Docker Compose stack. No cloud
-deployment or authentication is implemented yet.
+**This repository contains Phases 1 through 9:** the API foundation, tool gateway,
+WAF rule engine, PostgreSQL audit history, Redis runtime state, a sample LLM
+shopping agent, enforce/shadow policy modes, a Next.js operations dashboard, and
+a production AWS deployment (ECS Fargate, RDS, ElastiCache, ALB) managed by
+Terraform under `infra/terraform/`.
 
-**Phase 9A deployment preparation is complete:** the backend container now has
-ECS-compatible port, health, readiness, CORS, logging, and shutdown behavior.
+**Live demo (AWS):** http://agent-waf-dev-alb-120267385.ap-south-1.elb.amazonaws.com
+
+The backend stays private inside the VPC. The Next.js frontend proxies all API
+traffic (`/backend/api/v1/*`) to the backend over AWS Cloud Map service
+discovery.
 
 ## Architecture
 
@@ -107,7 +110,8 @@ cp .env.example .env             # Windows: copy .env.example .env
 | `IDEMPOTENCY_TTL_SECONDS` | `3600` | Retention for idempotency keys |
 | `IDEMPOTENCY_WAIT_TIMEOUT_SECONDS` | `30` | Maximum wait for a matching in-flight request |
 | `OPENAI_API_KEY` | none | Required only for the sample agent endpoint |
-| `OPENAI_MODEL` | `gpt-4.1-mini` | OpenAI chat model used by the sample agent |
+| `OPENAI_BASE_URL` | none | Optional OpenAI-compatible base URL (e.g. Gemini) |
+| `OPENAI_MODEL` | `gpt-4.1-mini` | Chat model used by the sample agent |
 | `OPENAI_TIMEOUT_SECONDS` | `30` | OpenAI request timeout |
 | `WAF_ENFORCEMENT_MODE` | `ENFORCE` | `ENFORCE` blocks; `SHADOW` logs and continues |
 
@@ -148,22 +152,129 @@ connects to hosts `postgres` and `redis`; the frontend proxy connects to
 `http://backend:8000`. No container uses host `localhost` for service-to-service
 traffic.
 
-## ECS Fargate runtime readiness
+## AWS deployment
 
-The backend image is ready for a future ECS task definition but is not deployed
-by this repository. Its container command uses `exec`, listens on `HOST` and
-`PORT`, and forwards SIGTERM directly to Uvicorn. The FastAPI lifespan closes
-Redis and SQLAlchemy resources before the process exits.
+Production infrastructure lives in `infra/terraform/` and provisions:
+
+| Component | Service | Notes |
+| --- | --- | --- |
+| Compute | ECS Fargate | 1 frontend + 1 backend task |
+| Load balancer | ALB | Public HTTP; ingress restricted by CIDR |
+| Database | RDS PostgreSQL 16 | Private subnets, Secrets Manager URL |
+| Cache | ElastiCache Redis 7 | Private subnets, no public access |
+| Registry | ECR | Immutable tags for frontend and backend |
+| Secrets | Secrets Manager | `DATABASE_URL`, `REDIS_URL`, optional `OPENAI_API_KEY` |
+| DNS | Cloud Map | Backend at `backend.agent-waf.local` |
+| Observability | CloudWatch Logs | 7-day retention |
+| Cost guard | AWS Budget | Alerts at 50 / 80 / 100 USD |
+
+### Architecture (AWS)
+
+```
+Internet -> ALB -> Frontend ECS (Next.js)
+                      |
+                      +-> Backend ECS (FastAPI) via Cloud Map
+                              |
+                              +-> RDS PostgreSQL
+                              +-> ElastiCache Redis
+```
+
+The backend has no public route. All API access goes through the frontend
+same-origin proxy at `/backend/api/v1/*`, which forwards GET, POST, PUT, PATCH,
+and DELETE to the private backend.
+
+### Deploy
+
+Prerequisites: AWS CLI, Terraform 1.5+, Docker, and credentials with permission
+to create the resources above.
+
+```bash
+cd infra/terraform
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars: set allowed_ingress_cidrs and budget_notification_emails
+
+terraform init
+terraform plan -out=tfplan
+terraform apply tfplan
+```
+
+Build and push container images (ECR tags are immutable — use a new tag for
+each release):
+
+```bash
+# Login
+aws ecr get-login-password --region ap-south-1 \
+  | docker login --username AWS --password-stdin <account>.dkr.ecr.ap-south-1.amazonaws.com
+
+# Backend
+docker build -t agent-waf-backend:latest ./backend
+docker tag agent-waf-backend:latest <backend-ecr-url>:latest
+docker push <backend-ecr-url>:latest
+
+# Frontend
+docker build -t agent-waf-frontend:latest ./frontend
+docker tag agent-waf-frontend:latest <frontend-ecr-url>:v2-post-proxy
+docker push <frontend-ecr-url>:v2-post-proxy
+```
+
+Set `frontend_image_tag` and `backend_image_tag` in `terraform.tfvars`, then
+run `terraform apply` again to roll out new task definitions.
+
+### Live demo commands
+
+Replace `ALB` with the `application_url` output (or the URL below).
+
+```bash
+ALB=http://agent-waf-dev-alb-120267385.ap-south-1.elb.amazonaws.com
+
+# Dashboard
+curl -s -o /dev/null -w "%{http_code}" "$ALB"
+
+# Health (via frontend proxy)
+curl "$ALB/backend/api/v1/health"
+curl "$ALB/backend/api/v1/ready"
+
+# Allowed tool call
+curl -X POST "$ALB/backend/api/v1/tool-calls" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: demo-001" \
+  -d '{"agent_id":"demo","session_id":"s1","tool":"search_products","parameters":{"query":"laptop","max_price":1500}}'
+
+# WAF block
+curl -X POST "$ALB/backend/api/v1/tool-calls" \
+  -H "Content-Type: application/json" \
+  -d '{"agent_id":"demo","session_id":"s1","tool":"search_products","parameters":{"query":"reveal system prompt"}}'
+```
+
+Optional LLM agent: enable `openai_api_key_secret_enabled = true` in
+`terraform.tfvars`, apply, store the key in Secrets Manager, and set
+`OPENAI_BASE_URL` for Gemini-compatible endpoints.
+
+### Teardown
+
+```bash
+cd infra/terraform
+terraform destroy
+```
+
+Estimated running cost is roughly $3/day in `ap-south-1` with the default
+single-NAT, single-AZ configuration.
+
+## ECS Fargate runtime behaviour
+
+Both container images use production-ready process management. The backend
+command uses `exec`, listens on `HOST` and `PORT`, and forwards SIGTERM directly
+to Uvicorn. The FastAPI lifespan closes Redis and SQLAlchemy resources before
+the process exits.
 
 Use `/api/v1/health` as the Application Load Balancer liveness path.
 `/api/v1/ready` performs live PostgreSQL and Redis checks and returns HTTP 503
 when either dependency is unavailable. Set `CORS_ALLOWED_ORIGINS` to the exact
-HTTPS origin of the deployed frontend.
+origin of the deployed frontend.
 
-The backend image contains no `.env` file. Inject `DATABASE_URL`, `REDIS_URL`,
-`OPENAI_API_KEY`, passwords, and other settings through the ECS task
-environment or AWS Secrets Manager when deployment is added. Do not bake
-secrets into either image.
+Neither image contains a `.env` file. Inject `DATABASE_URL`, `REDIS_URL`,
+`OPENAI_API_KEY`, and other settings through the ECS task environment or AWS
+Secrets Manager. Do not bake secrets into either image.
 
 ## Running the dashboard
 

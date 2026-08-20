@@ -60,8 +60,7 @@ resource "aws_secretsmanager_secret_version" "database_url" {
 resource "aws_secretsmanager_secret_version" "redis_url" {
   secret_id = aws_secretsmanager_secret.redis_url.id
   secret_string = format(
-    "redis://:%s@%s:6379/0",
-    urlencode(random_password.redis_auth.result),
+    "redis://%s:6379/0",
     aws_elasticache_replication_group.main.primary_endpoint_address,
   )
 

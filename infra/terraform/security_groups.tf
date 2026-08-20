@@ -99,6 +99,15 @@ resource "aws_vpc_security_group_egress_rule" "frontend_to_backend" {
   referenced_security_group_id = aws_security_group.backend_ecs.id
 }
 
+resource "aws_vpc_security_group_egress_rule" "frontend_https_egress" {
+  security_group_id = aws_security_group.frontend_ecs.id
+  description       = "ECR image pull and AWS APIs over HTTPS via NAT"
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
+  cidr_ipv4         = "0.0.0.0/0"
+}
+
 resource "aws_vpc_security_group_egress_rule" "frontend_dns_udp" {
   security_group_id = aws_security_group.frontend_ecs.id
   description       = "VPC DNS resolver UDP"
