@@ -13,9 +13,7 @@ Terraform under `infra/terraform/`.
 
 **Live demo (AWS):** http://agent-waf-dev-alb-120267385.ap-south-1.elb.amazonaws.com
 
-The live URL is currently CIDR-restricted to specific IPs as a security measure. 
-It may not be reachable from your network — please refer to the demo video for a 
-full live walkthrough, or reach out and I can open access for verification.
+
 <img width="1881" height="800" alt="image" src="https://github.com/user-attachments/assets/4fdd8165-b2f6-42de-9807-6e07a93143c2" />
 
 
