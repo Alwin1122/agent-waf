@@ -259,6 +259,14 @@ curl -X POST "$ALB/backend/api/v1/tool-calls" \
   -H "Idempotency-Key: demo-001" \
   -d '{"user_id":"user-1","agent_id":"demo-agent","session_id":"s1","tool":"search_products","parameters":{"query":"laptop","max_price":1500}}'
 
+# Rate limit (3 calls/60s per agent+tool — run 4x quickly, 4th returns 429)
+for i in 1 2 3 4; do
+curl -X POST "$ALB/backend/api/v1/tool-calls" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
+  -d '{"user_id":"user-1","agent_id":"rl-demo","session_id":"rl1","tool":"search_products","parameters":{"query":"laptop"}}'
+done
+
 # Parameter validation block
 curl -X POST "$ALB/backend/api/v1/tool-calls" \
   -H "Content-Type: application/json" \
