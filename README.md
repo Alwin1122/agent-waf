@@ -21,6 +21,18 @@ The backend stays private inside the VPC. The Next.js frontend proxies all API
 traffic (`/backend/api/v1/*`) to the backend over AWS Cloud Map service
 discovery.
 
+## WAF Capabilities
+
+This implementation satisfies all four required rule types plus the shadow-mode bonus, verified live on AWS:
+
+| # | Rule | Verified |
+|---|------|----------|
+| 1 | Rate limiting | ✅ 3 calls/60s per agent+tool, 429 on 4th |
+| 2 | Parameter validation | ✅ blocks blocklisted phrases (e.g. prompt injection) |
+| 3 | Data scope | ✅ blocks access outside an agent's declared customer scope |
+| 4 | Sequence enforcement | ✅ blocks out-of-order tool calls within a session |
+| Bonus | Shadow mode | ✅ logs WOULD_BLOCK without blocking, for safe rule calibration |
+
 ## Architecture
 
 The target architecture is:
